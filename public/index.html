@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pong Game</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: black;
+        }
+        canvas {
+            display: block;
+            margin: auto;
+            background: black;
+        }
+        #score {
+            position: absolute;
+            top: 20px;
+            width: 100%;
+            text-align: center;
+            font-size: 48px;
+            color: white;
+            font-family: "Courier New", Courier, monospace;
+        }
+    </style>
+</head>
+<body>
+    <div id="score">0 : 0</div>
+    <canvas id="pongCanvas" width="1200" height="600"></canvas>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const canvas = document.getElementById('pongCanvas');
+        const context = canvas.getContext('2d');
+        const scoreElement = document.getElementById('score');
+        const socket = io();
+
+        let player = null;
+        let ball = { x: 600, y: 300 };
+        let paddle1 = { y: 250 };
+        let paddle2 = { y: 250 };
+        let targetPaddle1Y = 250;
+        let targetPaddle2Y = 250;
+        let score = { player1: 0, player2: 0 };
+        let playerNames = { player1: 'Player 1', player2: 'Player 2' };
+        const paddleWidth = 10, paddleHeight = 100;
+
+        const keys = {};
+
+        document.addEventListener('keydown', (event) => {
+            keys[event.key] = true;
+        });
+
+        document.addEventListener('keyup', (event) => {
+            keys[event.key] = false;
+        });
+
+        socket.on('assignPlayer', (assignedPlayer) => {
+            player = assignedPlayer;
+            const name = prompt('Enter your name:');
+            socket.emit('setPlayerName', name || `Unnamed ${player}`);
+        });
+
+        socket.on('gameState', (gameState) => {
+            ball = gameState.ball;
+            paddle1 = gameState.paddle1;
+            paddle2 = gameState.paddle2;
+            score = gameState.score;
+            playerNames = gameState.playerNames;
+            updateScore();
+        });
+
+        socket.on('updatePaddles', (paddles) => {
+            targetPaddle1Y = paddles.paddle1Y;
+            targetPaddle2Y = paddles.paddle2Y;
+        });
+
+        socket.on('updateBall', (updatedBall) => {
+            ball = updatedBall;
+        });
+
+        socket.on('updateScore', (updatedScore) => {
+            score = updatedScore;
+            updateScore();
+        });
+
+        socket.on('updatePlayerNames', (names) => {
+            playerNames = names;
+        });
+
+        function updateScore() {
+            scoreElement.textContent = `${score.player1} : ${score.player2}`;
+        }
+
+        function interpolatePaddles() {
+            paddle1.y += (targetPaddle1Y - paddle1.y) * 0.2;
+            paddle2.y += (targetPaddle2Y - paddle2.y) * 0.2;
+        }
+
+        function movePaddles() {
+            if (player === 'player1') {
+                if (keys['w'] && paddle1.y > 0) {
+                    paddle1.y -= 5;
+                    socket.emit('paddleMove', { y: paddle1.y });
+                }
+                if (keys['s'] && paddle1.y < canvas.height - paddleHeight) {
+                    paddle1.y += 5;
+                    socket.emit('paddleMove', { y: paddle1.y });
+                }
+            }
+
+            if (player === 'player2') {
+                if (keys['ArrowUp'] && paddle2.y > 0) {
+                    paddle2.y -= 5;
+                    socket.emit('paddleMove', { y: paddle2.y });
+                }
+                if (keys['ArrowDown'] && paddle2.y < canvas.height - paddleHeight) {
+                    paddle2.y += 5;
+                    socket.emit('paddleMove', { y: paddle2.y });
+                }
+            }
+        }
+
+        function drawRect(x, y, width, height, color) {
+            context.fillStyle = color;
+            context.fillRect(x, y, width, height);
+        }
+
+        function drawCircle(x, y, radius, color) {
+            context.fillStyle = color;
+            context.beginPath();
+            context.arc(x, y, radius, 0, Math.PI * 2);
+            context.closePath();
+            context.fill();
+        }
+
+        function drawDashedLine() {
+            context.strokeStyle = 'white';
+            context.setLineDash([10, 10]);
+            context.beginPath();
+            context.moveTo(canvas.width / 2, 0);
+            context.lineTo(canvas.width / 2, canvas.height);
+            context.stroke();
+            context.setLineDash([]);
+        }
+
+        function drawPlayerNames() {
+            context.fillStyle = 'white';
+            context.font = '20px Arial';
+            context.textAlign = 'center';
+            context.fillText(playerNames.player1, 100, 30);
+            context.fillText(playerNames.player2, canvas.width - 100, 30);
+        }
+
+        function draw() {
+            context.clearRect(0, 0, canvas.width, canvas.height);
+
+            drawDashedLine();
+            drawRect(0, paddle1.y, paddleWidth, paddleHeight, 'white');
+            drawRect(canvas.width - paddleWidth, paddle2.y, paddleWidth, paddleHeight, 'white');
+            drawCircle(ball.x, ball.y, 10, 'white');
+            drawPlayerNames();
+        }
+
+        function update() {
+            interpolatePaddles();
+            movePaddles();
+        }
+
+        function gameLoop() {
+            update();
+            draw();
+            requestAnimationFrame(gameLoop);
+        }
+
+        gameLoop();
+    </script>
+</body>
+</html>
